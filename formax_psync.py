@@ -1,7 +1,7 @@
 import sublime, sublime_plugin
 import os,sys,subprocess,re
 import traceback
-import Example.simplejson as json
+import FormaxPsync.simplejson as json
 configs = {}
 nestingLimit = 30
 configName = '.formax_sublime'
@@ -13,7 +13,7 @@ debugJson = False
 messageTimeout = 250
 removeLineComment = re.compile('//.*', re.I)
 from time import sleep
-class ExampleCommand(sublime_plugin.WindowCommand):
+class FormaxPsyncCommand(sublime_plugin.WindowCommand):
     def run(self, edit=None):
 
         # self.window_id =sublime.Window.id(self)
@@ -21,29 +21,42 @@ class ExampleCommand(sublime_plugin.WindowCommand):
             file_path = os.path.dirname(guessConfigFile(sublime.active_window().folders()))
         else :
             file_path = os.path.dirname(sublime.active_window().active_view().file_name())
-        configFile = getConfigFile(file_path)
-        if configFile is None:
-            print("please init config file '"+configName+"' ")
-            return
+
         userConfig = getUserConfig()
         if userConfig is None:
-            printMessage("please init config file!")
+            printMessage("ERROR please init config file!")
             return 
+        result = verifyConfig(userConfig)
+        if result is not True:
+            printMessage(result)
+            return
         projectPath =getProjectRoot()
         os.chdir(projectPath)
-        userConfig = getUserConfig()
-
-        cmd = 'ls -al'
-        cmd = 'bash bin/psync.sh -h aliTest -v liaochao'
+        # print(userConfig)
+        cmd = userConfig['action']
+        # cmd = 'bash bin/psync.sh -h {host} -v {version}'.format(**userConfig)
         # result = subprocess.Popen(cmd,shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout.readlines()
         # for line in result:
         #     print(line.decode())
         try:
-            subprocess.Popen(cmd,shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-            printMessage("psync succeeded!")
+
+            p=subprocess.Popen(cmd,shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,executable='/bin/bash')
+            p.wait()
+            if p.returncode == 0:
+                msg =p.stdout.read().decode('utf-8')
+                if "失败" in msg :
+                    printMessage("Command ["+cmd+"] run failed",status=True)
+                    sublime.error_message(msg)
+                else :
+                    printMessage("Command ["+cmd+"] run succeeded",status=True)
+                print(msg)
+            else :
+                printMessage("Command ["+cmd+"] run failed",status=True)
+                # printMessage(p.read())
+                print(p.stdout.read().decode('utf-8'))
         except Exception as e:
 
-            printMessage("psync failed!!! [Exception: "+stringifyException(e)+"]")
+            printMessage("Command ["+cmd+"] failed!!! [Exception: "+stringifyException(e)+"]")
 
         # print(output)
       
@@ -52,10 +65,10 @@ class AutoPsync(sublime_plugin.EventListener):
         userConfig = getUserConfig()
         if userConfig is None :
             return
-        if userConfig['psync_on_save'] == False:
+        if 'action_on_save' not in userConfig or userConfig['action_on_save'] == False:
             return
         print('run psync command')
-        # sublime.active_window().run_command('example')
+        sublime.active_window().run_command('formax_psync')
 
 def getUserConfig():
     projectPath = getProjectRoot()
@@ -110,7 +123,7 @@ def getConfigFile(file_path):
     # try cached
     try:
         if configs[cacheKey] and os.path.exists(configs[cacheKey]) and os.path.getsize(configs[cacheKey]) > 0:
-            printMessage("Loading config: cache hit (key: " + cacheKey + ")")
+            # printMessage("Loading config: cache hit (key: " + cacheKey + ")")
             
             return configs[cacheKey]
         else:
@@ -181,10 +194,15 @@ def getFileName(view):
 def verifyConfig(config):
     if type(config) is not dict:
         return "Config is not a {dict} type"
-    keys = ['action_on_save','action']
+    keys = ['action','action_on_save']
     for key in keys:
         if key not in config:
             return "Config is missing a {" + key + "} key"
+    if config['action'] is not None and isString(config['action']) is False:
+        return "Config entry 'action' must be null or string, " + str(type(config['action'])) + " given"
+    # if config['version'] is not None and isString(config['version']) is False:
+    #     return "Config entry 'version' must be null or string, " + str(type(config['version'])) + " given"
+    return True
 # Finds a real file path among given folder paths
 # and returns the path or None
 #
@@ -269,7 +287,8 @@ def printMessage(text, name=None, onlyVerbose=False, status=False):
     message += text
 
     if isDebug and (onlyVerbose is False or isDebugVerbose is True):
-        print (message.encode('utf-8'))
+        # print (message.encode('utf-8'))
+        print (message)
 
     if status:
         dumpMessage(message)
@@ -285,10 +304,10 @@ def systemNotify(text):
 
         if sys.platform == "darwin":
             """ Run Grown Notification """
-            cmd = '/usr/local/bin/growlnotify -a "Sublime Text 2" -t "FTPSync message" -m "'+text+'"'
+            cmd = '/usr/local/bin/growlnotify -a "Sublime Text 3" -t "FTPSync message" -m "'+text+'"'
             subprocess.call(cmd,shell=True)
         elif sys.platform == "linux2":
-            subprocess.call('/usr/bin/notify-send "Sublime Text 2" "'+text+'"',shell=True)
+            subprocess.call('/usr/bin/notify-send "Sublime Text 3" "'+text+'"',shell=True)
         elif sys.platform == "win32":
             """ Find the notifaction platform for windows if there is one"""
 
