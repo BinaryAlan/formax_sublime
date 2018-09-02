@@ -32,7 +32,7 @@ class FormaxPsyncCommand(sublime_plugin.WindowCommand):
             return
         projectPath =getProjectRoot()
         os.chdir(projectPath)
-        # print(userConfig)
+        print(userConfig)
         cmd = userConfig['action']
         # cmd = 'bash bin/psync.sh -h {host} -v {version}'.format(**userConfig)
         # result = subprocess.Popen(cmd,shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT).stdout.readlines()
